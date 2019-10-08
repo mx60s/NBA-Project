@@ -1,95 +1,92 @@
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 import csv
-driver = webdriver.Chrome()
+import copy
+
+chrome_options = webdriver.ChromeOptions()
+prefs = {"profile.managed_default_content_settings.images": 2}
+chrome_options.add_experimental_option("prefs", prefs)
+chrome_options.add_argument("headless")
+driver = webdriver.Chrome(chrome_options=chrome_options)
 
 #Get name from draftFile
-statsFile = open("./Desktop/statsFile.csv", "w+")
-linksFile = open("./Desktop/PlayerLinks.csv")
+statsFile = open("statsFile.csv", "w+")
+linksFile = open("PlayerLinks.csv")
 linksReader = csv.reader(linksFile)
-draftFile = open("./Desktop/draftFile.csv")
-draftReader = csv.reader(draftFile)
+#draftFile = open("./Desktop/draftFile.csv")
+#draftReader = csv.reader(draftFile)
 
-statsFile.write("Name, Position, Year, Spot, Games, WSp, VORP, PER, TS, BPM \n")
+# lol
+default_fields = dict()
 
-for draftRow in draftReader:
-    name = draftRow[0]
-    year = draftRow[1]
-    spot = draftRow[2]
-    link = "--"
-    linksFile.seek(0)
-    for linkRow in linksReader:
-        if name == linkRow[0]:
-            link = linkRow[1]
-    ws = "0"
-    vorp = "0"
-    pos = "NA"
-    per = "0"
-    ts = "0"
-    bpm = "0"
-    games = "0"
-    if link != "--":
-        try:
-            driver.get(link)
-        except:
-            print("EXCEPTION WAS THROWN")
-            driver.close()
-            driver = webdriver.Chrome()
-            driver.get(link)
+"""
+Get the fields
+"""
+link0 = "https://www.basketball-reference.com/players/a/abdulka01.html"
+try:
+    driver.get(link0)
+except:
+    print("EXCEPTION WAS THROWN")
+    driver.close()
+    driver = webdriver.Chrome()
+    driver.get(link0)
 
-        tableHeader = driver.find_elements_by_xpath('//*[@id="advanced"]/thead/tr/th')
+perGameCol = driver.find_element_by_xpath('//table[@id="per_game"]/thead/tr')
+advancedCol = driver.find_element_by_xpath('//table[@id="advanced"]/thead/tr')
+tables = [perGameCol, advancedCol]
 
-        index = "--"
-        for cols in tableHeader:
-            if cols.text == "WS/48":
-                index = str(tableHeader.index(cols))
-        if index != "--":
-            ws = driver.find_element_by_xpath('//*[@id="advanced"]/tfoot/tr/td[' + index + ']').text
+for table in tables:
+    for col in table.find_elements_by_xpath(".//th"):
+        label = col.get_attribute('data-stat')
+        default_fields[label] = "NA"
 
-        index = "--"
-        for cols in tableHeader:
-            if cols.text == "VORP":
-                index = str(tableHeader.index(cols))
-        if index != "--":
-            vorp = driver.find_element_by_xpath('//*[@id="advanced"]/tfoot/tr/td[' + index + ']').text
+csv_header = ""
+for field in default_fields.keys():
+    csv_header += field + ","
 
-        index = "--"
-        for cols in tableHeader:
-            if cols.text == "PER":
-                index = str(tableHeader.index(cols))
-        if index != "--":
-            per = driver.find_element_by_xpath('//*[@id="advanced"]/tfoot/tr/td[' + index + ']').text
+print(csv_header)
 
-        index = "--"
-        for cols in tableHeader:
-            if cols.text == "TS%":
-                index = str(tableHeader.index(cols))
-        if index != "--":
-            ts = driver.find_element_by_xpath('//*[@id="advanced"]/tfoot/tr/td[' + index + ']').text
+statsFile.write(csv_header + "\n")
 
-        index = "--"
-        for cols in tableHeader:
-            if cols.text == "BPM":
-                index = str(tableHeader.index(cols))
-        if index != "--":
-            bpm = driver.find_element_by_xpath('//*[@id="advanced"]/tfoot/tr/td[' + index + ']').text
+#print(*default_fields.keys())
 
-        index = "--"
-        for cols in tableHeader:
-            if cols.text == "G":
-                index = str(tableHeader.index(cols))
-        if index != "--":
-            games = driver.find_element_by_xpath('//*[@id="advanced"]/tfoot/tr/td[' + index + ']').text
+"""
+Iterate through players and collect values
+"""
+"""
+for player, link in linksReader:
+    try:
+        driver.get(link)
+    except:
+        print("EXCEPTION WAS THROWN")
+        driver.close()
+        driver = webdriver.Chrome()
+        driver.get(link)
 
-        ###########      find player Position #############
-        table = driver.find_elements_by_xpath('//*[@id="totals"]/tbody/tr')
-        posList = []
-        for row in table:
-            pos = row.find_element_by_xpath('.//td[4]').text
-            posList.append(str(pos))
-        playerPos = max(set(posList), key=posList.count)
+    perGame = driver.find_element_by_xpath('//table[@id="per_game"]/tbody')
+    advanced = driver.find_element_by_xpath('//table[@id="advanced"]/tbody')
 
-        statsFile.write(name + ", " + playerPos + ", " + year + ", " + spot + ", " + games + ', ' + ws + ", " + vorp + ", " + per + ", " + ts + ", " + bpm + "\n")
+    pg_years = perGame.find_elements_by_xpath(".//tr")
+    a_years = advanced.find_elements_by_xpath(".//tr")
+
+    for i in range(len(pg_years)):  # for each year a player is active, get row data for that year from both tables
+        playerData = copy.deepcopy(default_fields) # start off with default fields
+        for table in [pg_years, a_years]:
+            for col in table[i].find_elements_by_xpath(".//td"):
+                label = col.get_attribute('data-stat')
+                #if col.find_element_by_xpath('.//a').text:
+                #    playerData[label] = col.find_element_by_css_selector('a').text
+                #else:
+                playerData[label] = col.text
+    
+        playerData["name"] = player
+
+        csv_line = ""
+        for val in playerData.values():
+            csv_line += val + ","
+    
+        statsFile.write(csv_line + "\n")
+"""
 
 statsFile.close()
 driver.close()
